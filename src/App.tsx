@@ -28,6 +28,7 @@ type Todo = {
   title: string;
   done: boolean;
   project: string;
+  milestone: string;
   priority: Priority;
   assignee: string;
   endDate: string;
@@ -70,6 +71,7 @@ const duePresets = () => {
 const emptyDraft = {
   title: "",
   project: "",
+  milestone: "",
   priority: "medium" as Priority,
   assignee: "",
   endDate: "",
@@ -109,16 +111,22 @@ export function App() {
   const [customDueOpen, setCustomDueOpen] = useState(false);
   const [priorityOpenFor, setPriorityOpenFor] = useState<string | null>(null);
   const [projectOpenFor, setProjectOpenFor] = useState<string | null>(null);
-  const [batchMoveOpen, setBatchMoveOpen] = useState(false);
+  const [milestoneOpenFor, setMilestoneOpenFor] = useState<string | null>(null);
+  const [batchMoveOpen, setBatchMoveOpen] = useState<"project" | "milestone" | "priority" | null>(null);
   const [newProjectInput, setNewProjectInput] = useState("");
+  const [newMilestoneInput, setNewMilestoneInput] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const knownProjects = Array.from(new Set(todos.map((t) => t.project).filter(Boolean)));
+  const knownMilestones = Array.from(new Set(todos.map((t) => t.milestone).filter(Boolean)));
 
-  const setPriority = (id: string, p: Priority) => {
-    setTodos((t) => t.map((x) => (x.id === id ? { ...x, priority: p } : x)));
+  const setPriorityFor = (ids: string[] | string, p: Priority) => {
+    const idSet = new Set(Array.isArray(ids) ? ids : [ids]);
+    setTodos((t) => t.map((x) => (idSet.has(x.id) ? { ...x, priority: p } : x)));
     setPriorityOpenFor(null);
+    setBatchMoveOpen(null);
+    if (Array.isArray(ids)) setSelected(new Set());
   };
 
   const setProjectFor = (ids: string[] | string, project: string) => {
@@ -126,7 +134,16 @@ export function App() {
     setTodos((t) => t.map((x) => (idSet.has(x.id) ? { ...x, project } : x)));
     setProjectOpenFor(null);
     setNewProjectInput("");
-    setBatchMoveOpen(false);
+    setBatchMoveOpen(null);
+    if (Array.isArray(ids)) setSelected(new Set());
+  };
+
+  const setMilestoneFor = (ids: string[] | string, milestone: string) => {
+    const idSet = new Set(Array.isArray(ids) ? ids : [ids]);
+    setTodos((t) => t.map((x) => (idSet.has(x.id) ? { ...x, milestone } : x)));
+    setMilestoneOpenFor(null);
+    setNewMilestoneInput("");
+    setBatchMoveOpen(null);
     if (Array.isArray(ids)) setSelected(new Set());
   };
 
@@ -381,7 +398,7 @@ export function App() {
                             <button
                               key={p}
                               type="button"
-                              onClick={() => setPriority(todo.id, p)}
+                              onClick={() => setPriorityFor(todo.id, p)}
                               title={priorityColors[p].label}
                               aria-label={priorityColors[p].label}
                               className={`inline-block h-4 w-4 shrink-0 cursor-pointer rounded-full transition hover:scale-110 ${priorityColors[p].dot} ${
@@ -471,6 +488,84 @@ export function App() {
                       </>
                     )}
                   </div>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMilestoneOpenFor((cur) => (cur === todo.id ? null : todo.id))
+                      }
+                      className={`rounded px-1.5 py-0.5 transition ${
+                        todo.milestone
+                          ? "bg-muted text-foreground hover:bg-muted/70"
+                          : "border border-dashed border-muted-foreground/40 hover:text-foreground"
+                      }`}
+                    >
+                      {todo.milestone ? `◎ ${todo.milestone}` : "+ milestone"}
+                    </button>
+                    {milestoneOpenFor === todo.id && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => {
+                            setMilestoneOpenFor(null);
+                            setNewMilestoneInput("");
+                          }}
+                        />
+                        <div className="absolute left-0 top-7 z-20 flex w-56 flex-col gap-2 rounded-md border bg-background p-2 shadow-md">
+                          {knownMilestones.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {knownMilestones.map((m) => (
+                                <Button
+                                  key={m}
+                                  type="button"
+                                  size="sm"
+                                  variant={todo.milestone === m ? "default" : "outline"}
+                                  onClick={() => setMilestoneFor(todo.id, m)}
+                                >
+                                  {m}
+                                </Button>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex gap-1">
+                            <Input
+                              value={newMilestoneInput}
+                              onChange={(e) => setNewMilestoneInput(e.target.value)}
+                              placeholder="New milestone"
+                              className="h-8"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  const n = newMilestoneInput.trim();
+                                  if (n) setMilestoneFor(todo.id, n);
+                                }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => {
+                                const n = newMilestoneInput.trim();
+                                if (n) setMilestoneFor(todo.id, n);
+                              }}
+                              disabled={!newMilestoneInput.trim()}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                          {todo.milestone && (
+                            <button
+                              type="button"
+                              onClick={() => setMilestoneFor(todo.id, "")}
+                              className="text-left text-xs text-muted-foreground hover:text-foreground"
+                            >
+                              Remove milestone
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
                   {todo.assignee && (
                     <span className="inline-flex items-center gap-1">
                       <Avatar name={todo.assignee} />
@@ -511,72 +606,65 @@ export function App() {
               type="button"
               size="sm"
               variant="outline"
-              onClick={() => setBatchMoveOpen((v) => !v)}
+              onClick={() =>
+                setBatchMoveOpen((v) => (v === "priority" ? null : "priority"))
+              }
             >
-              Move to project…
+              Set priority…
             </Button>
-            {batchMoveOpen && (
+            {batchMoveOpen === "priority" && (
               <>
                 <div
                   className="fixed inset-0 z-30"
-                  onClick={() => {
-                    setBatchMoveOpen(false);
-                    setNewProjectInput("");
-                  }}
+                  onClick={() => setBatchMoveOpen(null)}
                 />
-                <div className="absolute bottom-10 left-0 z-40 flex w-64 flex-col gap-2 rounded-md border bg-background p-2 shadow-md">
-                  {knownProjects.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {knownProjects.map((p) => (
-                        <Button
-                          key={p}
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setProjectFor(Array.from(selected), p)}
-                        >
-                          {p}
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex gap-1">
-                    <Input
-                      value={newProjectInput}
-                      onChange={(e) => setNewProjectInput(e.target.value)}
-                      placeholder="New project"
-                      className="h-8"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          const n = newProjectInput.trim();
-                          if (n) setProjectFor(Array.from(selected), n);
-                        }
-                      }}
-                    />
-                    <Button
+                <div className="absolute bottom-10 left-0 z-40 flex items-center gap-2 rounded-md border bg-background p-2 shadow-md">
+                  {PRIORITY_ORDER.map((p) => (
+                    <button
+                      key={p}
                       type="button"
-                      size="sm"
-                      onClick={() => {
-                        const n = newProjectInput.trim();
-                        if (n) setProjectFor(Array.from(selected), n);
-                      }}
-                      disabled={!newProjectInput.trim()}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setProjectFor(Array.from(selected), "")}
-                    className="text-left text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    Remove from project
-                  </button>
+                      onClick={() => setPriorityFor(Array.from(selected), p)}
+                      title={priorityColors[p].label}
+                      aria-label={priorityColors[p].label}
+                      className={`inline-block h-5 w-5 shrink-0 cursor-pointer rounded-full transition hover:scale-110 ${priorityColors[p].dot}`}
+                    />
+                  ))}
                 </div>
               </>
             )}
           </div>
+          <BatchPicker
+            label="Move to project…"
+            kind="project"
+            open={batchMoveOpen === "project"}
+            onToggle={() =>
+              setBatchMoveOpen((v) => (v === "project" ? null : "project"))
+            }
+            onClose={() => {
+              setBatchMoveOpen(null);
+              setNewProjectInput("");
+            }}
+            known={knownProjects}
+            newInput={newProjectInput}
+            setNewInput={setNewProjectInput}
+            onPick={(v) => setProjectFor(Array.from(selected), v)}
+          />
+          <BatchPicker
+            label="Set milestone…"
+            kind="milestone"
+            open={batchMoveOpen === "milestone"}
+            onToggle={() =>
+              setBatchMoveOpen((v) => (v === "milestone" ? null : "milestone"))
+            }
+            onClose={() => {
+              setBatchMoveOpen(null);
+              setNewMilestoneInput("");
+            }}
+            known={knownMilestones}
+            newInput={newMilestoneInput}
+            setNewInput={setNewMilestoneInput}
+            onPick={(v) => setMilestoneFor(Array.from(selected), v)}
+          />
           <button
             type="button"
             onClick={() => setSelected(new Set())}
@@ -637,6 +725,91 @@ function SubtaskSection({
           Add
         </Button>
       </form>
+    </div>
+  );
+}
+
+function BatchPicker({
+  label,
+  kind,
+  open,
+  onToggle,
+  onClose,
+  known,
+  newInput,
+  setNewInput,
+  onPick,
+}: {
+  label: string;
+  kind: "project" | "milestone";
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  known: string[];
+  newInput: string;
+  setNewInput: (v: string) => void;
+  onPick: (v: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <Button type="button" size="sm" variant="outline" onClick={onToggle}>
+        {label}
+      </Button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={onClose} />
+          <div className="absolute bottom-10 left-0 z-40 flex w-64 flex-col gap-2 rounded-md border bg-background p-2 shadow-md">
+            {known.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {known.map((v) => (
+                  <Button
+                    key={v}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onPick(v)}
+                  >
+                    {v}
+                  </Button>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-1">
+              <Input
+                value={newInput}
+                onChange={(e) => setNewInput(e.target.value)}
+                placeholder={`New ${kind}`}
+                className="h-8"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const n = newInput.trim();
+                    if (n) onPick(n);
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  const n = newInput.trim();
+                  if (n) onPick(n);
+                }}
+                disabled={!newInput.trim()}
+              >
+                Add
+              </Button>
+            </div>
+            <button
+              type="button"
+              onClick={() => onPick("")}
+              className="text-left text-xs text-muted-foreground hover:text-foreground"
+            >
+              Remove {kind}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
