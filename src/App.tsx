@@ -1,8 +1,9 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Check, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import "./index.css";
 
 type Priority = "none" | "low" | "medium" | "high";
@@ -104,6 +105,14 @@ const initials = (name: string) =>
 
 const SEED_ASSIGNEES = ["Sarah", "Alex", "Jordan", "Priya", "Maya", "Leo"];
 
+const chipClass = (filled: boolean) =>
+  cn(
+    "rounded px-1.5 py-0.5 transition",
+    filled
+      ? "bg-muted text-foreground hover:bg-muted/70"
+      : "border border-dashed border-muted-foreground/40 hover:text-foreground",
+  );
+
 export function App() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [draft, setDraft] = useState(emptyDraft);
@@ -119,8 +128,15 @@ export function App() {
   const [newMilestoneInput, setNewMilestoneInput] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const knownProjects = Array.from(new Set(todos.map((t) => t.project).filter(Boolean)));
-  const knownMilestones = Array.from(new Set(todos.map((t) => t.milestone).filter(Boolean)));
+  const knownProjects = useMemo(
+    () => Array.from(new Set(todos.map((t) => t.project).filter(Boolean))),
+    [todos],
+  );
+  const knownMilestones = useMemo(
+    () => Array.from(new Set(todos.map((t) => t.milestone).filter(Boolean))),
+    [todos],
+  );
+  const presets = useMemo(() => duePresets(), []);
 
   const setPriorityFor = (ids: string[] | string, p: Priority) => {
     const idSet = new Set(Array.isArray(ids) ? ids : [ids]);
@@ -228,7 +244,7 @@ export function App() {
         {reached >= 1 && (
           <Field label="Due date" htmlFor="f-end">
             <div className="flex flex-wrap items-center gap-2">
-              {duePresets().map((p) => (
+              {presets.map((p) => (
                 <Button
                   key={p.label}
                   type="button"
@@ -370,31 +386,13 @@ export function App() {
                       title={priorityColors[todo.priority].label}
                       className={`inline-block h-3 w-3 shrink-0 cursor-pointer rounded-full transition hover:scale-110 ${priorityColors[todo.priority].dot}`}
                     />
-                    {priorityOpenFor === todo.id && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPriorityOpenFor(null);
-                          }}
-                        />
-                        <div className="absolute left-0 top-5 z-20 flex items-center gap-2 rounded-md border bg-background p-2 shadow-md">
-                          {PRIORITY_ORDER.map((p) => (
-                            <button
-                              key={p}
-                              type="button"
-                              onClick={() => setPriorityFor(todo.id, p)}
-                              title={priorityColors[p].label}
-                              aria-label={priorityColors[p].label}
-                              className={`inline-block h-4 w-4 shrink-0 cursor-pointer rounded-full transition hover:scale-110 ${priorityColors[p].dot} ${
-                                todo.priority === p ? "ring-2 ring-foreground ring-offset-1" : ""
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </>
-                    )}
+                    <Popover
+                      open={priorityOpenFor === todo.id}
+                      onClose={() => setPriorityOpenFor(null)}
+                      className="flex items-center gap-2"
+                    >
+                      <PriorityRow current={todo.priority} onPick={(p) => setPriorityFor(todo.id, p)} />
+                    </Popover>
                   </div>
                   <span>{todo.title}</span>
                 </div>
@@ -405,80 +403,69 @@ export function App() {
                       onClick={() =>
                         setSubtasksOpenFor((cur) => (cur === todo.id ? null : todo.id))
                       }
-                      className={`rounded px-1.5 py-0.5 transition ${
-                        todo.subtasks.length > 0
-                          ? "bg-muted text-foreground hover:bg-muted/70"
-                          : "border border-dashed border-muted-foreground/40 hover:text-foreground"
-                      }`}
+                      className={chipClass(todo.subtasks.length > 0)}
                     >
                       {todo.subtasks.length > 0
                         ? `↳ ${todo.subtasks.filter((s) => s.done).length}/${todo.subtasks.length}`
                         : "+ subtask"}
                     </button>
-                    {subtasksOpenFor === todo.id && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSubtasksOpenFor(null);
-                            setNewSubtaskInput("");
+                    <Popover
+                      open={subtasksOpenFor === todo.id}
+                      onClose={() => {
+                        setSubtasksOpenFor(null);
+                        setNewSubtaskInput("");
+                      }}
+                      className="flex w-60 flex-col gap-2"
+                    >
+                      {todo.subtasks.length > 0 && (
+                        <ul className="flex flex-col gap-1">
+                          {todo.subtasks.map((s) => (
+                            <li key={s.id} className="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={s.done}
+                                onChange={() => toggleSubtask(todo.id, s.id)}
+                              />
+                              <span
+                                className={cn("flex-1", s.done && "line-through text-muted-foreground")}
+                              >
+                                {s.title}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => deleteSubtask(todo.id, s.id)}
+                                className="text-xs text-muted-foreground hover:text-foreground"
+                                aria-label="Remove subtask"
+                              >
+                                ✕
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="flex gap-1">
+                        <Input
+                          value={newSubtaskInput}
+                          onChange={(e) => setNewSubtaskInput(e.target.value)}
+                          placeholder="New subtask"
+                          className="h-8"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addSubtask(todo.id, newSubtaskInput);
+                            }
                           }}
                         />
-                        <div className="absolute left-0 top-7 z-20 flex w-60 flex-col gap-2 rounded-md border bg-background p-2 shadow-md">
-                          {todo.subtasks.length > 0 && (
-                            <ul className="flex flex-col gap-1">
-                              {todo.subtasks.map((s) => (
-                                <li key={s.id} className="flex items-center gap-2 text-sm">
-                                  <input
-                                    type="checkbox"
-                                    checked={s.done}
-                                    onChange={() => toggleSubtask(todo.id, s.id)}
-                                  />
-                                  <span
-                                    className={`flex-1 ${
-                                      s.done ? "line-through text-muted-foreground" : ""
-                                    }`}
-                                  >
-                                    {s.title}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => deleteSubtask(todo.id, s.id)}
-                                    className="text-xs text-muted-foreground hover:text-foreground"
-                                    aria-label="Remove subtask"
-                                  >
-                                    ✕
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          <div className="flex gap-1">
-                            <Input
-                              value={newSubtaskInput}
-                              onChange={(e) => setNewSubtaskInput(e.target.value)}
-                              placeholder="New subtask"
-                              className="h-8"
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  addSubtask(todo.id, newSubtaskInput);
-                                }
-                              }}
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => addSubtask(todo.id, newSubtaskInput)}
-                              disabled={!newSubtaskInput.trim()}
-                            >
-                              Add
-                            </Button>
-                          </div>
-                        </div>
-                      </>
-                    )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => addSubtask(todo.id, newSubtaskInput)}
+                          disabled={!newSubtaskInput.trim()}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    </Popover>
                   </div>
                   <div className="relative">
                     <button
@@ -486,78 +473,23 @@ export function App() {
                       onClick={() =>
                         setProjectOpenFor((cur) => (cur === todo.id ? null : todo.id))
                       }
-                      className={`rounded px-1.5 py-0.5 transition ${
-                        todo.project
-                          ? "bg-muted text-foreground hover:bg-muted/70"
-                          : "border border-dashed border-muted-foreground/40 hover:text-foreground"
-                      }`}
+                      className={chipClass(!!todo.project)}
                     >
                       {todo.project || "+ project"}
                     </button>
-                    {projectOpenFor === todo.id && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setProjectOpenFor(null);
-                            setNewProjectInput("");
-                          }}
-                        />
-                        <div className="absolute left-0 top-7 z-20 flex w-56 flex-col gap-2 rounded-md border bg-background p-2 shadow-md">
-                          {knownProjects.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {knownProjects.map((p) => (
-                                <Button
-                                  key={p}
-                                  type="button"
-                                  size="sm"
-                                  variant={todo.project === p ? "default" : "outline"}
-                                  onClick={() => setProjectFor(todo.id, p)}
-                                >
-                                  {p}
-                                </Button>
-                              ))}
-                            </div>
-                          )}
-                          <div className="flex gap-1">
-                            <Input
-                              value={newProjectInput}
-                              onChange={(e) => setNewProjectInput(e.target.value)}
-                              placeholder="New project"
-                              className="h-8"
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  const n = newProjectInput.trim();
-                                  if (n) setProjectFor(todo.id, n);
-                                }
-                              }}
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => {
-                                const n = newProjectInput.trim();
-                                if (n) setProjectFor(todo.id, n);
-                              }}
-                              disabled={!newProjectInput.trim()}
-                            >
-                              Add
-                            </Button>
-                          </div>
-                          {todo.project && (
-                            <button
-                              type="button"
-                              onClick={() => setProjectFor(todo.id, "")}
-                              className="text-left text-xs text-muted-foreground hover:text-foreground"
-                            >
-                              Remove from project
-                            </button>
-                          )}
-                        </div>
-                      </>
-                    )}
+                    <NamePicker
+                      kind="project"
+                      open={projectOpenFor === todo.id}
+                      onClose={() => {
+                        setProjectOpenFor(null);
+                        setNewProjectInput("");
+                      }}
+                      known={knownProjects}
+                      current={todo.project}
+                      newInput={newProjectInput}
+                      setNewInput={setNewProjectInput}
+                      onPick={(v) => setProjectFor(todo.id, v)}
+                    />
                   </div>
                   <div className="relative">
                     <button
@@ -565,78 +497,23 @@ export function App() {
                       onClick={() =>
                         setMilestoneOpenFor((cur) => (cur === todo.id ? null : todo.id))
                       }
-                      className={`rounded px-1.5 py-0.5 transition ${
-                        todo.milestone
-                          ? "bg-muted text-foreground hover:bg-muted/70"
-                          : "border border-dashed border-muted-foreground/40 hover:text-foreground"
-                      }`}
+                      className={chipClass(!!todo.milestone)}
                     >
                       {todo.milestone ? `◎ ${todo.milestone}` : "+ milestone"}
                     </button>
-                    {milestoneOpenFor === todo.id && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMilestoneOpenFor(null);
-                            setNewMilestoneInput("");
-                          }}
-                        />
-                        <div className="absolute left-0 top-7 z-20 flex w-56 flex-col gap-2 rounded-md border bg-background p-2 shadow-md">
-                          {knownMilestones.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {knownMilestones.map((m) => (
-                                <Button
-                                  key={m}
-                                  type="button"
-                                  size="sm"
-                                  variant={todo.milestone === m ? "default" : "outline"}
-                                  onClick={() => setMilestoneFor(todo.id, m)}
-                                >
-                                  {m}
-                                </Button>
-                              ))}
-                            </div>
-                          )}
-                          <div className="flex gap-1">
-                            <Input
-                              value={newMilestoneInput}
-                              onChange={(e) => setNewMilestoneInput(e.target.value)}
-                              placeholder="New milestone"
-                              className="h-8"
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  const n = newMilestoneInput.trim();
-                                  if (n) setMilestoneFor(todo.id, n);
-                                }
-                              }}
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => {
-                                const n = newMilestoneInput.trim();
-                                if (n) setMilestoneFor(todo.id, n);
-                              }}
-                              disabled={!newMilestoneInput.trim()}
-                            >
-                              Add
-                            </Button>
-                          </div>
-                          {todo.milestone && (
-                            <button
-                              type="button"
-                              onClick={() => setMilestoneFor(todo.id, "")}
-                              className="text-left text-xs text-muted-foreground hover:text-foreground"
-                            >
-                              Remove milestone
-                            </button>
-                          )}
-                        </div>
-                      </>
-                    )}
+                    <NamePicker
+                      kind="milestone"
+                      open={milestoneOpenFor === todo.id}
+                      onClose={() => {
+                        setMilestoneOpenFor(null);
+                        setNewMilestoneInput("");
+                      }}
+                      known={knownMilestones}
+                      current={todo.milestone}
+                      newInput={newMilestoneInput}
+                      setNewInput={setNewMilestoneInput}
+                      onPick={(v) => setMilestoneFor(todo.id, v)}
+                    />
                   </div>
                   {todo.assignee && (
                     <span className="inline-flex items-center gap-1">
@@ -679,59 +556,61 @@ export function App() {
             >
               Set priority…
             </Button>
-            {batchMoveOpen === "priority" && (
-              <>
-                <div
-                  className="fixed inset-0 z-30"
-                  onClick={() => setBatchMoveOpen(null)}
-                />
-                <div className="absolute bottom-10 left-0 z-40 flex items-center gap-2 rounded-md border bg-background p-2 shadow-md">
-                  {PRIORITY_ORDER.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setPriorityFor(Array.from(selected), p)}
-                      title={priorityColors[p].label}
-                      aria-label={priorityColors[p].label}
-                      className={`inline-block h-5 w-5 shrink-0 cursor-pointer rounded-full transition hover:scale-110 ${priorityColors[p].dot}`}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
+            <Popover
+              open={batchMoveOpen === "priority"}
+              onClose={() => setBatchMoveOpen(null)}
+              anchor="top"
+              className="flex items-center gap-2"
+            >
+              <PriorityRow current="none" onPick={(p) => setPriorityFor(Array.from(selected), p)} />
+            </Popover>
           </div>
-          <BatchPicker
-            label="Move to project…"
-            kind="project"
-            open={batchMoveOpen === "project"}
-            onToggle={() =>
-              setBatchMoveOpen((v) => (v === "project" ? null : "project"))
-            }
-            onClose={() => {
-              setBatchMoveOpen(null);
-              setNewProjectInput("");
-            }}
-            known={knownProjects}
-            newInput={newProjectInput}
-            setNewInput={setNewProjectInput}
-            onPick={(v) => setProjectFor(Array.from(selected), v)}
-          />
-          <BatchPicker
-            label="Set milestone…"
-            kind="milestone"
-            open={batchMoveOpen === "milestone"}
-            onToggle={() =>
-              setBatchMoveOpen((v) => (v === "milestone" ? null : "milestone"))
-            }
-            onClose={() => {
-              setBatchMoveOpen(null);
-              setNewMilestoneInput("");
-            }}
-            known={knownMilestones}
-            newInput={newMilestoneInput}
-            setNewInput={setNewMilestoneInput}
-            onPick={(v) => setMilestoneFor(Array.from(selected), v)}
-          />
+          <div className="relative">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setBatchMoveOpen((v) => (v === "project" ? null : "project"))}
+            >
+              Move to project…
+            </Button>
+            <NamePicker
+              kind="project"
+              open={batchMoveOpen === "project"}
+              onClose={() => {
+                setBatchMoveOpen(null);
+                setNewProjectInput("");
+              }}
+              known={knownProjects}
+              newInput={newProjectInput}
+              setNewInput={setNewProjectInput}
+              onPick={(v) => setProjectFor(Array.from(selected), v)}
+              anchor="top"
+            />
+          </div>
+          <div className="relative">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setBatchMoveOpen((v) => (v === "milestone" ? null : "milestone"))}
+            >
+              Set milestone…
+            </Button>
+            <NamePicker
+              kind="milestone"
+              open={batchMoveOpen === "milestone"}
+              onClose={() => {
+                setBatchMoveOpen(null);
+                setNewMilestoneInput("");
+              }}
+              known={knownMilestones}
+              newInput={newMilestoneInput}
+              setNewInput={setNewMilestoneInput}
+              onPick={(v) => setMilestoneFor(Array.from(selected), v)}
+              anchor="top"
+            />
+          </div>
           <button
             type="button"
             onClick={() => setSelected(new Set())}
@@ -745,88 +624,138 @@ export function App() {
   );
 }
 
-function BatchPicker({
-  label,
+function PriorityRow({
+  current,
+  onPick,
+}: {
+  current: Priority;
+  onPick: (p: Priority) => void;
+}) {
+  return (
+    <>
+      {PRIORITY_ORDER.map((p) => (
+        <button
+          key={p}
+          type="button"
+          onClick={() => onPick(p)}
+          title={priorityColors[p].label}
+          aria-label={priorityColors[p].label}
+          className={cn(
+            "inline-block h-4 w-4 shrink-0 cursor-pointer rounded-full transition hover:scale-110",
+            priorityColors[p].dot,
+            current === p && "ring-2 ring-foreground ring-offset-1",
+          )}
+        />
+      ))}
+    </>
+  );
+}
+
+function Popover({
+  open,
+  onClose,
+  anchor = "bottom",
+  className,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  anchor?: "top" | "bottom";
+  className?: string;
+  children: ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-10"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      />
+      <div
+        className={cn(
+          "absolute left-0 z-20 rounded-md border bg-background p-2 shadow-md",
+          anchor === "top" ? "bottom-10" : "top-7",
+          className,
+        )}
+      >
+        {children}
+      </div>
+    </>
+  );
+}
+
+function NamePicker({
   kind,
   open,
-  onToggle,
   onClose,
   known,
+  current,
   newInput,
   setNewInput,
   onPick,
+  anchor = "bottom",
 }: {
-  label: string;
   kind: "project" | "milestone";
   open: boolean;
-  onToggle: () => void;
   onClose: () => void;
   known: string[];
+  current?: string;
   newInput: string;
   setNewInput: (v: string) => void;
   onPick: (v: string) => void;
+  anchor?: "top" | "bottom";
 }) {
+  const submit = () => {
+    const n = newInput.trim();
+    if (n) onPick(n);
+  };
   return (
-    <div className="relative">
-      <Button type="button" size="sm" variant="outline" onClick={onToggle}>
-        {label}
-      </Button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={onClose} />
-          <div className="absolute bottom-10 left-0 z-40 flex w-64 flex-col gap-2 rounded-md border bg-background p-2 shadow-md">
-            {known.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {known.map((v) => (
-                  <Button
-                    key={v}
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onPick(v)}
-                  >
-                    {v}
-                  </Button>
-                ))}
-              </div>
-            )}
-            <div className="flex gap-1">
-              <Input
-                value={newInput}
-                onChange={(e) => setNewInput(e.target.value)}
-                placeholder={`New ${kind}`}
-                className="h-8"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    const n = newInput.trim();
-                    if (n) onPick(n);
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => {
-                  const n = newInput.trim();
-                  if (n) onPick(n);
-                }}
-                disabled={!newInput.trim()}
-              >
-                Add
-              </Button>
-            </div>
-            <button
+    <Popover open={open} onClose={onClose} anchor={anchor} className="flex w-64 flex-col gap-2">
+      {known.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {known.map((v) => (
+            <Button
+              key={v}
               type="button"
-              onClick={() => onPick("")}
-              className="text-left text-xs text-muted-foreground hover:text-foreground"
+              size="sm"
+              variant={current === v ? "default" : "outline"}
+              onClick={() => onPick(v)}
             >
-              Remove {kind}
-            </button>
-          </div>
-        </>
+              {v}
+            </Button>
+          ))}
+        </div>
       )}
-    </div>
+      <div className="flex gap-1">
+        <Input
+          value={newInput}
+          onChange={(e) => setNewInput(e.target.value)}
+          placeholder={`New ${kind}`}
+          className="h-8"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+          }}
+        />
+        <Button type="button" size="sm" onClick={submit} disabled={!newInput.trim()}>
+          Add
+        </Button>
+      </div>
+      {current && (
+        <button
+          type="button"
+          onClick={() => onPick("")}
+          className="text-left text-xs text-muted-foreground hover:text-foreground"
+        >
+          Remove {kind}
+        </button>
+      )}
+    </Popover>
   );
 }
 
