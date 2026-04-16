@@ -1,11 +1,20 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import "./index.css";
 
-type Priority = "low" | "medium" | "high";
+type Priority = "none" | "low" | "medium" | "high";
+
+const PRIORITY_ORDER: Priority[] = ["none", "low", "medium", "high"];
+
+const priorityColors: Record<Priority, { dot: string; label: string }> = {
+  none: { dot: "bg-gray-200 border border-gray-400", label: "No priority" },
+  low: { dot: "bg-emerald-500 border border-emerald-600", label: "Low priority" },
+  medium: { dot: "bg-amber-500 border border-amber-600", label: "Medium priority" },
+  high: { dot: "bg-red-500 border border-red-600", label: "High priority" },
+};
+
 
 type Subtask = {
   id: string;
@@ -19,7 +28,6 @@ type Todo = {
   done: boolean;
   project: string;
   priority: Priority;
-  milestone: string;
   assignee: string;
   endDate: string;
   subtasks: Subtask[];
@@ -58,35 +66,10 @@ const duePresets = () => {
   return all.filter((p) => (seen.has(p.value) ? false : (seen.add(p.value), true)));
 };
 
-const priorityMeta = {
-  low: {
-    label: "Low",
-    Icon: ArrowDown,
-    selected: "bg-emerald-500 text-white border-emerald-500 hover:bg-emerald-600 hover:text-white",
-    unselected: "border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-700",
-    badge: "text-emerald-600",
-  },
-  medium: {
-    label: "Medium",
-    Icon: Minus,
-    selected: "bg-amber-500 text-white border-amber-500 hover:bg-amber-600 hover:text-white",
-    unselected: "border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-700",
-    badge: "text-amber-600",
-  },
-  high: {
-    label: "High",
-    Icon: ArrowUp,
-    selected: "bg-red-500 text-white border-red-500 hover:bg-red-600 hover:text-white",
-    unselected: "border-red-200 text-red-700 hover:bg-red-50 hover:text-red-700",
-    badge: "text-red-600",
-  },
-} as const;
-
 const emptyDraft = {
   title: "",
   project: "",
-  priority: "medium" as Priority,
-  milestone: "",
+  priority: "none" as Priority,
   assignee: "",
   endDate: "",
 };
@@ -123,11 +106,13 @@ export function App() {
   const [draft, setDraft] = useState(emptyDraft);
   const [reached, setReached] = useState(0);
   const [customDueOpen, setCustomDueOpen] = useState(false);
-  const [addingMilestone, setAddingMilestone] = useState(false);
-  const [newMilestone, setNewMilestone] = useState("");
+  const [priorityOpenFor, setPriorityOpenFor] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const knownMilestones = Array.from(new Set(todos.map((t) => t.milestone).filter(Boolean)));
+  const setPriority = (id: string, p: Priority) => {
+    setTodos((t) => t.map((x) => (x.id === id ? { ...x, priority: p } : x)));
+    setPriorityOpenFor(null);
+  };
 
   const advance = (i: number) => setReached((r) => Math.max(r, i + 1));
 
@@ -138,8 +123,6 @@ export function App() {
     setDraft(emptyDraft);
     setReached(0);
     setCustomDueOpen(false);
-    setAddingMilestone(false);
-    setNewMilestone("");
   };
 
   const toggleTodo = (id: string) =>
@@ -252,33 +235,6 @@ export function App() {
         )}
 
         {reached >= 2 && (
-          <Field label="Priority" htmlFor="f-priority">
-            <div className="flex flex-wrap gap-2">
-              {(["low", "medium", "high"] as const).map((p) => {
-                const meta = priorityMeta[p];
-                const selected = draft.priority === p;
-                return (
-                  <Button
-                    key={p}
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className={selected ? meta.selected : meta.unselected}
-                    onClick={() => {
-                      setDraft({ ...draft, priority: p });
-                      advance(2);
-                    }}
-                  >
-                    <meta.Icon className="mr-1 h-4 w-4" />
-                    {meta.label}
-                  </Button>
-                );
-              })}
-            </div>
-          </Field>
-        )}
-
-        {reached >= 3 && (
           <Field label="Assignee" htmlFor="f-assignee">
             <div className="flex flex-wrap items-center gap-2">
               {SEED_ASSIGNEES.map((name) => {
@@ -289,7 +245,7 @@ export function App() {
                     type="button"
                     onClick={() => {
                       setDraft({ ...draft, assignee: name });
-                      advance(3);
+                      advance(2);
                     }}
                     className={`rounded-full transition ${
                       selected
@@ -307,7 +263,7 @@ export function App() {
                 type="button"
                 onClick={() => {
                   setDraft({ ...draft, assignee: "" });
-                  advance(3);
+                  advance(2);
                 }}
                 className="ml-1 text-xs text-muted-foreground hover:text-foreground"
               >
@@ -317,7 +273,7 @@ export function App() {
           </Field>
         )}
 
-        {reached >= 4 && (
+        {reached >= 3 && (
           <Field label="Project" htmlFor="f-project">
             <Input
               id="f-project"
@@ -325,87 +281,10 @@ export function App() {
               value={draft.project}
               onChange={(e) => {
                 setDraft({ ...draft, project: e.target.value });
-                if (e.target.value) advance(4);
+                if (e.target.value) advance(3);
               }}
-              onBlur={() => advance(4)}
+              onBlur={() => advance(3)}
             />
-          </Field>
-        )}
-
-        {reached >= 5 && (
-          <Field label="Milestone" htmlFor="f-milestone">
-            <div className="flex flex-wrap items-center gap-2">
-              {knownMilestones.map((name) => {
-                const selected = draft.milestone === name;
-                return (
-                  <Button
-                    key={name}
-                    type="button"
-                    size="sm"
-                    variant={selected ? "default" : "outline"}
-                    onClick={() => {
-                      setDraft({ ...draft, milestone: name });
-                      setAddingMilestone(false);
-                    }}
-                  >
-                    {name}
-                  </Button>
-                );
-              })}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setAddingMilestone((v) => !v)}
-              >
-                + Add
-              </Button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDraft({ ...draft, milestone: "" });
-                  setAddingMilestone(false);
-                }}
-                className="ml-1 text-xs text-muted-foreground hover:text-foreground"
-              >
-                None
-              </button>
-            </div>
-            {addingMilestone && (
-              <div className="mt-2 flex gap-2">
-                <Input
-                  id="f-milestone"
-                  value={newMilestone}
-                  onChange={(e) => setNewMilestone(e.target.value)}
-                  placeholder="Milestone name"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const n = newMilestone.trim();
-                      if (!n) return;
-                      setDraft({ ...draft, milestone: n });
-                      setAddingMilestone(false);
-                      setNewMilestone("");
-                    }
-                  }}
-                  className="w-48"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    const n = newMilestone.trim();
-                    if (!n) return;
-                    setDraft({ ...draft, milestone: n });
-                    setAddingMilestone(false);
-                    setNewMilestone("");
-                  }}
-                >
-                  Add
-                </Button>
-              </div>
-            )}
           </Field>
         )}
 
@@ -428,29 +307,57 @@ export function App() {
                 className="mt-1.5"
               />
               <div className="flex-1">
-                <button
-                  type="button"
-                  onClick={() => toggleExpand(todo.id)}
-                  className={`text-left font-medium ${todo.done ? "line-through text-muted-foreground" : ""}`}
-                >
-                  {todo.title}
-                </button>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPriorityOpenFor((cur) => (cur === todo.id ? null : todo.id))
+                      }
+                      title={`${priorityColors[todo.priority].label} — click to change`}
+                      aria-label={priorityColors[todo.priority].label}
+                      aria-expanded={priorityOpenFor === todo.id}
+                      className={`inline-block h-4 w-4 shrink-0 cursor-pointer rounded-full transition hover:scale-110 ${priorityColors[todo.priority].dot}`}
+                    />
+                    {priorityOpenFor === todo.id && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => setPriorityOpenFor(null)}
+                        />
+                        <div className="absolute left-0 top-6 z-20 flex items-center gap-2 rounded-md border bg-background p-2 shadow-md">
+                          {PRIORITY_ORDER.map((p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setPriority(todo.id, p)}
+                              title={priorityColors[p].label}
+                              aria-label={priorityColors[p].label}
+                              className={`inline-block h-4 w-4 shrink-0 cursor-pointer rounded-full transition hover:scale-110 ${priorityColors[p].dot} ${
+                                todo.priority === p ? "ring-2 ring-foreground ring-offset-1" : ""
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(todo.id)}
+                    className={`text-left font-medium ${todo.done ? "line-through text-muted-foreground" : ""}`}
+                  >
+                    {todo.title}
+                  </button>
+                </div>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   {todo.project && <span>proj: {todo.project}</span>}
-                  {todo.milestone && <span>milestone: {todo.milestone}</span>}
                   {todo.assignee && (
                     <span className="inline-flex items-center gap-1">
                       <Avatar name={todo.assignee} />
                       {todo.assignee}
                     </span>
                   )}
-                  <span className={`inline-flex items-center gap-0.5 ${priorityMeta[todo.priority].badge}`}>
-                    {(() => {
-                      const Icon = priorityMeta[todo.priority].Icon;
-                      return <Icon className="h-3 w-3" />;
-                    })()}
-                    {priorityMeta[todo.priority].label}
-                  </span>
                   {todo.endDate && <span>end: {todo.endDate}</span>}
                   {todo.subtasks.length > 0 && (
                     <span>
