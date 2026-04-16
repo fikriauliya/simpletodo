@@ -126,7 +126,6 @@ export function App() {
     setTodos((t) => t.map((x) => (idSet.has(x.id) ? { ...x, priority: p } : x)));
     setPriorityOpenFor(null);
     setBatchMoveOpen(null);
-    if (Array.isArray(ids)) setSelected(new Set());
   };
 
   const setProjectFor = (ids: string[] | string, project: string) => {
@@ -135,7 +134,6 @@ export function App() {
     setProjectOpenFor(null);
     setNewProjectInput("");
     setBatchMoveOpen(null);
-    if (Array.isArray(ids)) setSelected(new Set());
   };
 
   const setMilestoneFor = (ids: string[] | string, milestone: string) => {
@@ -144,7 +142,6 @@ export function App() {
     setMilestoneOpenFor(null);
     setNewMilestoneInput("");
     setBatchMoveOpen(null);
-    if (Array.isArray(ids)) setSelected(new Set());
   };
 
   const toggleSelect = (id: string) =>
@@ -211,10 +208,11 @@ export function App() {
     );
 
   return (
-    <div className="mx-auto max-w-3xl p-6">
-      <h1 className="mb-6 text-2xl font-semibold">Simple Todo</h1>
+    <div className="fixed inset-y-0 right-0 flex w-96 flex-col border-l bg-background shadow-xl">
+      <div className="flex-1 overflow-y-auto p-4">
+      <h1 className="mb-4 text-xl font-semibold">Simple Todo</h1>
 
-      <form onSubmit={addTodo} className="mb-6 flex flex-col gap-3">
+      <form onSubmit={addTodo} className="mb-4 flex flex-col gap-3">
         <Field label="Task" htmlFor="f-title">
           <Input
             id="f-title"
@@ -326,7 +324,7 @@ export function App() {
         </Button>
       </form>
 
-      <ul className="group/list flex flex-col gap-2 pb-16">
+      <ul className="group/list flex flex-col gap-2">
         {todos.length === 0 && (
           <li className="text-sm text-muted-foreground">No tasks yet.</li>
         )}
@@ -598,8 +596,10 @@ export function App() {
         })}
       </ul>
 
+      </div>
+
       {selected.size > 0 && (
-        <div className="fixed inset-x-0 bottom-4 z-30 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-full border bg-background px-4 py-2 shadow-lg">
+        <div className="flex flex-wrap items-center gap-2 border-t bg-background px-3 py-2 text-sm">
           <span className="text-sm font-medium">{selected.size} selected</span>
           <div className="relative">
             <Button
