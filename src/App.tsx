@@ -10,10 +10,10 @@ type Priority = "none" | "low" | "medium" | "high";
 const PRIORITY_ORDER: Priority[] = ["none", "low", "medium", "high"];
 
 const priorityColors: Record<Priority, { dot: string; label: string }> = {
-  none: { dot: "bg-gray-200 border border-gray-400", label: "No priority" },
-  low: { dot: "bg-emerald-500 border border-emerald-600", label: "Low priority" },
-  medium: { dot: "bg-amber-500 border border-amber-600", label: "Medium priority" },
-  high: { dot: "bg-red-500 border border-red-600", label: "High priority" },
+  none: { dot: "bg-gray-200 border border-gray-400", label: "No color" },
+  low: { dot: "bg-emerald-500 border border-emerald-600", label: "Green" },
+  medium: { dot: "bg-amber-500 border border-amber-600", label: "Amber" },
+  high: { dot: "bg-red-500 border border-red-600", label: "Red" },
 };
 
 
@@ -357,29 +357,19 @@ export function App() {
               </button>
               <div className="flex-1">
                 <div
-                  className={`font-medium ${todo.done ? "line-through text-muted-foreground" : ""}`}
+                  className={`flex items-center gap-1.5 font-medium ${todo.done ? "line-through text-muted-foreground" : ""}`}
                 >
-                  {todo.title}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  <div className="relative">
+                  <div className="relative inline-flex">
                     <button
                       type="button"
                       onClick={() =>
                         setPriorityOpenFor((cur) => (cur === todo.id ? null : todo.id))
                       }
                       aria-expanded={priorityOpenFor === todo.id}
-                      className={`inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 transition ${
-                        todo.priority === "none"
-                          ? "border border-dashed border-muted-foreground/40 hover:text-foreground"
-                          : "bg-muted text-foreground hover:bg-muted/70"
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${priorityColors[todo.priority].dot}`}
-                      />
-                      {todo.priority === "none" ? "+ priority" : priorityColors[todo.priority].label.replace(" priority", "")}
-                    </button>
+                      aria-label={priorityColors[todo.priority].label}
+                      title={priorityColors[todo.priority].label}
+                      className={`inline-block h-3 w-3 shrink-0 cursor-pointer rounded-full transition hover:scale-110 ${priorityColors[todo.priority].dot}`}
+                    />
                     {priorityOpenFor === todo.id && (
                       <>
                         <div
@@ -389,7 +379,7 @@ export function App() {
                             setPriorityOpenFor(null);
                           }}
                         />
-                        <div className="absolute left-0 top-7 z-20 flex items-center gap-2 rounded-md border bg-background p-2 shadow-md">
+                        <div className="absolute left-0 top-5 z-20 flex items-center gap-2 rounded-md border bg-background p-2 shadow-md">
                           {PRIORITY_ORDER.map((p) => (
                             <button
                               key={p}
@@ -402,6 +392,90 @@ export function App() {
                               }`}
                             />
                           ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <span>{todo.title}</span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSubtasksOpenFor((cur) => (cur === todo.id ? null : todo.id))
+                      }
+                      className={`rounded px-1.5 py-0.5 transition ${
+                        todo.subtasks.length > 0
+                          ? "bg-muted text-foreground hover:bg-muted/70"
+                          : "border border-dashed border-muted-foreground/40 hover:text-foreground"
+                      }`}
+                    >
+                      {todo.subtasks.length > 0
+                        ? `↳ ${todo.subtasks.filter((s) => s.done).length}/${todo.subtasks.length}`
+                        : "+ subtask"}
+                    </button>
+                    {subtasksOpenFor === todo.id && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSubtasksOpenFor(null);
+                            setNewSubtaskInput("");
+                          }}
+                        />
+                        <div className="absolute left-0 top-7 z-20 flex w-60 flex-col gap-2 rounded-md border bg-background p-2 shadow-md">
+                          {todo.subtasks.length > 0 && (
+                            <ul className="flex flex-col gap-1">
+                              {todo.subtasks.map((s) => (
+                                <li key={s.id} className="flex items-center gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={s.done}
+                                    onChange={() => toggleSubtask(todo.id, s.id)}
+                                  />
+                                  <span
+                                    className={`flex-1 ${
+                                      s.done ? "line-through text-muted-foreground" : ""
+                                    }`}
+                                  >
+                                    {s.title}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteSubtask(todo.id, s.id)}
+                                    className="text-xs text-muted-foreground hover:text-foreground"
+                                    aria-label="Remove subtask"
+                                  >
+                                    ✕
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <div className="flex gap-1">
+                            <Input
+                              value={newSubtaskInput}
+                              onChange={(e) => setNewSubtaskInput(e.target.value)}
+                              placeholder="New subtask"
+                              className="h-8"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  addSubtask(todo.id, newSubtaskInput);
+                                }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => addSubtask(todo.id, newSubtaskInput)}
+                              disabled={!newSubtaskInput.trim()}
+                            >
+                              Add
+                            </Button>
+                          </div>
                         </div>
                       </>
                     )}
@@ -571,87 +645,6 @@ export function App() {
                     </span>
                   )}
                   {todo.endDate && <span>end: {todo.endDate}</span>}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSubtasksOpenFor((cur) => (cur === todo.id ? null : todo.id))
-                      }
-                      className={`rounded px-1.5 py-0.5 transition ${
-                        todo.subtasks.length > 0
-                          ? "bg-muted text-foreground hover:bg-muted/70"
-                          : "border border-dashed border-muted-foreground/40 hover:text-foreground"
-                      }`}
-                    >
-                      {todo.subtasks.length > 0
-                        ? `↳ ${todo.subtasks.filter((s) => s.done).length}/${todo.subtasks.length}`
-                        : "+ subtask"}
-                    </button>
-                    {subtasksOpenFor === todo.id && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSubtasksOpenFor(null);
-                            setNewSubtaskInput("");
-                          }}
-                        />
-                        <div className="absolute left-0 top-7 z-20 flex w-60 flex-col gap-2 rounded-md border bg-background p-2 shadow-md">
-                          {todo.subtasks.length > 0 && (
-                            <ul className="flex flex-col gap-1">
-                              {todo.subtasks.map((s) => (
-                                <li key={s.id} className="flex items-center gap-2 text-sm">
-                                  <input
-                                    type="checkbox"
-                                    checked={s.done}
-                                    onChange={() => toggleSubtask(todo.id, s.id)}
-                                  />
-                                  <span
-                                    className={`flex-1 ${
-                                      s.done ? "line-through text-muted-foreground" : ""
-                                    }`}
-                                  >
-                                    {s.title}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => deleteSubtask(todo.id, s.id)}
-                                    className="text-xs text-muted-foreground hover:text-foreground"
-                                    aria-label="Remove subtask"
-                                  >
-                                    ✕
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          <div className="flex gap-1">
-                            <Input
-                              value={newSubtaskInput}
-                              onChange={(e) => setNewSubtaskInput(e.target.value)}
-                              placeholder="New subtask"
-                              className="h-8"
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  addSubtask(todo.id, newSubtaskInput);
-                                }
-                              }}
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => addSubtask(todo.id, newSubtaskInput)}
-                              disabled={!newSubtaskInput.trim()}
-                            >
-                              Add
-                            </Button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
                 </div>
               </div>
               <Button
