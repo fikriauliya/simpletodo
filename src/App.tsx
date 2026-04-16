@@ -17,12 +17,6 @@ const priorityColors: Record<Priority, { dot: string; label: string }> = {
 };
 
 
-type Subtask = {
-  id: string;
-  title: string;
-  done: boolean;
-};
-
 type Todo = {
   id: string;
   title: string;
@@ -32,7 +26,6 @@ type Todo = {
   priority: Priority;
   assignee: string;
   endDate: string;
-  subtasks: Subtask[];
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -116,7 +109,6 @@ export function App() {
   const [newProjectInput, setNewProjectInput] = useState("");
   const [newMilestoneInput, setNewMilestoneInput] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const knownProjects = Array.from(new Set(todos.map((t) => t.project).filter(Boolean)));
   const knownMilestones = Array.from(new Set(todos.map((t) => t.milestone).filter(Boolean)));
@@ -156,7 +148,7 @@ export function App() {
   const addTodo = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!draft.title.trim()) return;
-    setTodos((t) => [...t, { id: uid(), done: false, subtasks: [], ...draft }]);
+    setTodos((t) => [...t, { id: uid(), done: false, ...draft }]);
     setDraft(emptyDraft);
     setReached(0);
     setCustomDueOpen(false);
@@ -174,38 +166,6 @@ export function App() {
       return next;
     });
   };
-
-  const toggleExpand = (id: string) =>
-    setExpanded((s) => {
-      const next = new Set(s);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-
-  const addSubtask = (todoId: string, title: string) => {
-    if (!title.trim()) return;
-    setTodos((t) =>
-      t.map((x) =>
-        x.id === todoId ? { ...x, subtasks: [...x.subtasks, { id: uid(), title, done: false }] } : x,
-      ),
-    );
-  };
-
-  const toggleSubtask = (todoId: string, subId: string) =>
-    setTodos((t) =>
-      t.map((x) =>
-        x.id === todoId
-          ? { ...x, subtasks: x.subtasks.map((s) => (s.id === subId ? { ...s, done: !s.done } : s)) }
-          : x,
-      ),
-    );
-
-  const deleteSubtask = (todoId: string, subId: string) =>
-    setTodos((t) =>
-      t.map((x) =>
-        x.id === todoId ? { ...x, subtasks: x.subtasks.filter((s) => s.id !== subId) } : x,
-      ),
-    );
 
   return (
     <div className="fixed inset-y-0 right-0 flex w-96 flex-col border-l bg-background shadow-xl">
@@ -331,20 +291,19 @@ export function App() {
         {todos.map((todo) => {
           const isSelected = selected.has(todo.id);
           return (
-          <li key={todo.id} className={`group/item rounded border p-3 ${isSelected ? "bg-muted/50" : ""}`}>
+          <li
+            key={todo.id}
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest("button, input, textarea, a")) return;
+              toggleSelect(todo.id);
+            }}
+            className={`cursor-pointer rounded border p-3 transition ${
+              isSelected
+                ? "border-primary bg-primary/10"
+                : "hover:bg-muted/40"
+            }`}
+          >
             <div className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={() => toggleSelect(todo.id)}
-                aria-label="Select task"
-                title="Select for bulk actions"
-                className={`mt-1.5 transition ${
-                  isSelected || selected.size > 0
-                    ? "opacity-100"
-                    : "opacity-0 group-hover/item:opacity-100"
-                }`}
-              />
               <button
                 type="button"
                 onClick={() => toggleTodo(todo.id)}
@@ -359,13 +318,11 @@ export function App() {
                 {todo.done && <Check className="h-3 w-3" strokeWidth={3} />}
               </button>
               <div className="flex-1">
-                <button
-                  type="button"
-                  onClick={() => toggleExpand(todo.id)}
-                  className={`text-left font-medium ${todo.done ? "line-through text-muted-foreground" : ""}`}
+                <div
+                  className={`font-medium ${todo.done ? "line-through text-muted-foreground" : ""}`}
                 >
                   {todo.title}
-                </button>
+                </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   <div className="relative">
                     <button
@@ -389,7 +346,10 @@ export function App() {
                       <>
                         <div
                           className="fixed inset-0 z-10"
-                          onClick={() => setPriorityOpenFor(null)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPriorityOpenFor(null);
+                          }}
                         />
                         <div className="absolute left-0 top-7 z-20 flex items-center gap-2 rounded-md border bg-background p-2 shadow-md">
                           {PRIORITY_ORDER.map((p) => (
@@ -426,7 +386,8 @@ export function App() {
                       <>
                         <div
                           className="fixed inset-0 z-10"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setProjectOpenFor(null);
                             setNewProjectInput("");
                           }}
@@ -504,7 +465,8 @@ export function App() {
                       <>
                         <div
                           className="fixed inset-0 z-10"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setMilestoneOpenFor(null);
                             setNewMilestoneInput("");
                           }}
@@ -571,11 +533,6 @@ export function App() {
                     </span>
                   )}
                   {todo.endDate && <span>end: {todo.endDate}</span>}
-                  {todo.subtasks.length > 0 && (
-                    <span>
-                      subtasks: {todo.subtasks.filter((s) => s.done).length}/{todo.subtasks.length}
-                    </span>
-                  )}
                 </div>
               </div>
               <Button variant="ghost" size="sm" onClick={() => deleteTodo(todo.id)}>
@@ -583,14 +540,6 @@ export function App() {
               </Button>
             </div>
 
-            {expanded.has(todo.id) && (
-              <SubtaskSection
-                todo={todo}
-                onAdd={(t) => addSubtask(todo.id, t)}
-                onToggle={(sid) => toggleSubtask(todo.id, sid)}
-                onDelete={(sid) => deleteSubtask(todo.id, sid)}
-              />
-            )}
           </li>
           );
         })}
@@ -600,7 +549,6 @@ export function App() {
 
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-t bg-background px-3 py-2 text-sm">
-          <span className="text-sm font-medium">{selected.size} selected</span>
           <div className="relative">
             <Button
               type="button"
@@ -674,57 +622,6 @@ export function App() {
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-function SubtaskSection({
-  todo,
-  onAdd,
-  onToggle,
-  onDelete,
-}: {
-  todo: Todo;
-  onAdd: (title: string) => void;
-  onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
-}) {
-  const [title, setTitle] = useState("");
-
-  const submit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    onAdd(title);
-    setTitle("");
-  };
-
-  return (
-    <div className="mt-3 ml-7 border-l pl-4">
-      <ul className="flex flex-col gap-1">
-        {todo.subtasks.map((s) => (
-          <li key={s.id} className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={s.done} onChange={() => onToggle(s.id)} />
-            <span className={s.done ? "line-through text-muted-foreground" : ""}>{s.title}</span>
-            <button
-              type="button"
-              onClick={() => onDelete(s.id)}
-              className="ml-auto text-xs text-muted-foreground hover:text-foreground"
-            >
-              remove
-            </button>
-          </li>
-        ))}
-      </ul>
-      <form onSubmit={submit} className="mt-2 flex gap-2">
-        <Input
-          placeholder="Add subtask"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="h-8"
-        />
-        <Button type="submit" size="sm" variant="secondary">
-          Add
-        </Button>
-      </form>
     </div>
   );
 }
