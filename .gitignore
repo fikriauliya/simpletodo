@@ -36,3 +36,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Playwright MCP scratch
 .playwright-mcp/
 *.png
+
+# Build output
+dist/
+
+# Netlify CLI state
+.netlify/

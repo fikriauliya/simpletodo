@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Check } from "lucide-react";
+import { Check, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,12 @@ const priorityColors: Record<Priority, { dot: string; label: string }> = {
 };
 
 
+type Subtask = {
+  id: string;
+  title: string;
+  done: boolean;
+};
+
 type Todo = {
   id: string;
   title: string;
@@ -26,6 +32,7 @@ type Todo = {
   priority: Priority;
   assignee: string;
   endDate: string;
+  subtasks: Subtask[];
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -105,6 +112,8 @@ export function App() {
   const [priorityOpenFor, setPriorityOpenFor] = useState<string | null>(null);
   const [projectOpenFor, setProjectOpenFor] = useState<string | null>(null);
   const [milestoneOpenFor, setMilestoneOpenFor] = useState<string | null>(null);
+  const [subtasksOpenFor, setSubtasksOpenFor] = useState<string | null>(null);
+  const [newSubtaskInput, setNewSubtaskInput] = useState("");
   const [batchMoveOpen, setBatchMoveOpen] = useState<"project" | "milestone" | "priority" | null>(null);
   const [newProjectInput, setNewProjectInput] = useState("");
   const [newMilestoneInput, setNewMilestoneInput] = useState("");
@@ -136,6 +145,35 @@ export function App() {
     setBatchMoveOpen(null);
   };
 
+  const addSubtask = (todoId: string, title: string) => {
+    const t = title.trim();
+    if (!t) return;
+    setTodos((list) =>
+      list.map((x) =>
+        x.id === todoId
+          ? { ...x, subtasks: [...x.subtasks, { id: uid(), title: t, done: false }] }
+          : x,
+      ),
+    );
+    setNewSubtaskInput("");
+  };
+
+  const toggleSubtask = (todoId: string, subId: string) =>
+    setTodos((list) =>
+      list.map((x) =>
+        x.id === todoId
+          ? { ...x, subtasks: x.subtasks.map((s) => (s.id === subId ? { ...s, done: !s.done } : s)) }
+          : x,
+      ),
+    );
+
+  const deleteSubtask = (todoId: string, subId: string) =>
+    setTodos((list) =>
+      list.map((x) =>
+        x.id === todoId ? { ...x, subtasks: x.subtasks.filter((s) => s.id !== subId) } : x,
+      ),
+    );
+
   const toggleSelect = (id: string) =>
     setSelected((s) => {
       const next = new Set(s);
@@ -148,7 +186,7 @@ export function App() {
   const addTodo = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!draft.title.trim()) return;
-    setTodos((t) => [...t, { id: uid(), done: false, ...draft }]);
+    setTodos((t) => [...t, { id: uid(), done: false, subtasks: [], ...draft }]);
     setDraft(emptyDraft);
     setReached(0);
     setCustomDueOpen(false);
@@ -533,10 +571,98 @@ export function App() {
                     </span>
                   )}
                   {todo.endDate && <span>end: {todo.endDate}</span>}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSubtasksOpenFor((cur) => (cur === todo.id ? null : todo.id))
+                      }
+                      className={`rounded px-1.5 py-0.5 transition ${
+                        todo.subtasks.length > 0
+                          ? "bg-muted text-foreground hover:bg-muted/70"
+                          : "border border-dashed border-muted-foreground/40 hover:text-foreground"
+                      }`}
+                    >
+                      {todo.subtasks.length > 0
+                        ? `↳ ${todo.subtasks.filter((s) => s.done).length}/${todo.subtasks.length}`
+                        : "+ subtask"}
+                    </button>
+                    {subtasksOpenFor === todo.id && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSubtasksOpenFor(null);
+                            setNewSubtaskInput("");
+                          }}
+                        />
+                        <div className="absolute left-0 top-7 z-20 flex w-60 flex-col gap-2 rounded-md border bg-background p-2 shadow-md">
+                          {todo.subtasks.length > 0 && (
+                            <ul className="flex flex-col gap-1">
+                              {todo.subtasks.map((s) => (
+                                <li key={s.id} className="flex items-center gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={s.done}
+                                    onChange={() => toggleSubtask(todo.id, s.id)}
+                                  />
+                                  <span
+                                    className={`flex-1 ${
+                                      s.done ? "line-through text-muted-foreground" : ""
+                                    }`}
+                                  >
+                                    {s.title}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteSubtask(todo.id, s.id)}
+                                    className="text-xs text-muted-foreground hover:text-foreground"
+                                    aria-label="Remove subtask"
+                                  >
+                                    ✕
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <div className="flex gap-1">
+                            <Input
+                              value={newSubtaskInput}
+                              onChange={(e) => setNewSubtaskInput(e.target.value)}
+                              placeholder="New subtask"
+                              className="h-8"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  addSubtask(todo.id, newSubtaskInput);
+                                }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => addSubtask(todo.id, newSubtaskInput)}
+                              disabled={!newSubtaskInput.trim()}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => deleteTodo(todo.id)}>
-                Delete
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => deleteTodo(todo.id)}
+                aria-label="Delete task"
+                title="Delete task"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
               </Button>
             </div>
 
